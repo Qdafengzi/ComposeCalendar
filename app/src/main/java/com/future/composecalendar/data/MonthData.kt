@@ -44,6 +44,9 @@ data class MonthData(
          * 星期,0-6 对应周日到周一
          */
         val week: Int = 0,
+        /**
+         * 一年的第几周
+         */
         val weekOfYear: Int = 0,
 
 )
@@ -70,6 +73,8 @@ data class CalendarData(
          */
         val isLeapYear: Boolean = false,
 
+        /**
+         * 数据
+         */
         val list: List<MonthData> = listOf(),
-        val monthDataMap :LinkedHashMap<Int,ArrayList<MonthData>> = linkedMapOf()
 )

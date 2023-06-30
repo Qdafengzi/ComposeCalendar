@@ -48,7 +48,6 @@ import com.future.composecalendar.utils.XLogger
 import com.future.composecalendar.viewmodel.HomeViewModel
 
 class MainActivity : ComponentActivity() {
-    private val TAG = "MainActivity"
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -85,6 +84,9 @@ fun Calendar(homeViewModel: HomeViewModel = viewModel()) {
     }
 }
 
+/**
+ * 星期信息
+ */
 @Composable
 fun WeekRow(weekTitleList: List<String>) {
     Row(
@@ -105,6 +107,9 @@ fun WeekRow(weekTitleList: List<String>) {
     }
 }
 
+/**
+ * 年和月
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YearAndMonth(homeViewModel: HomeViewModel, pagerState: PagerState) {
@@ -132,6 +137,9 @@ fun YearAndMonth(homeViewModel: HomeViewModel, pagerState: PagerState) {
 }
 
 
+/**
+ * 获取 TextMeasurer 测量文字的高度
+ */
 @OptIn(ExperimentalTextApi::class)
 @Composable
 fun getTextMeasurerAndTextSize(): Pair<TextMeasurer, IntSize> {
@@ -151,6 +159,9 @@ fun getTextMeasurerAndTextSize(): Pair<TextMeasurer, IntSize> {
     return Pair(textMeasurer, textSize)
 }
 
+/**
+ * 日历的滑动页面
+ */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalTextApi::class)
 @Composable
 fun CalendarPager(
@@ -176,6 +187,7 @@ fun CalendarPager(
 
     LaunchedEffect(key1 = pagerState.currentPage, block = {
         XLogger.d("=======>${pagerState.currentPage}")
+        //TODO：监听 滑动到<=2 或 size-2 的时候追加 日期数据
     })
     XLogger.d("==================>CalendarPager")
 
@@ -193,7 +205,14 @@ fun CalendarPager(
         Canvas(modifier = Modifier
             .fillMaxWidth()
             .height((maxColumn * screenWidthDp / 7f).dp)
-
+//            .pointerInput(Unit) {
+//                detectTapGestures(onTap = {
+//                   //TODO:点击 定位哪一天
+//                })
+//                detectDragGestures { change, dragAmount ->
+//                    //TODO:竖直方向滑动 进入周历模式
+//                }
+//            }
 //            .background(color = Color.Blue)
             , onDraw = {
                 val perWidthWithPadding = this.size.width / 7f
@@ -206,10 +225,12 @@ fun CalendarPager(
                     monthData.weekOfYear
                 }.size
 
+                //根据星期 进行分组
                 val groupedData = calendarData.list.groupBy { monthData ->
                     monthData.week
                 }
 
+                //竖着按照列进行 绘制
                 groupedData.forEach { (week, monthDataList) ->
                     monthDataList.forEachIndexed { index, monthData ->
                         //按照列写的数据
@@ -224,8 +245,6 @@ fun CalendarPager(
 //                            perWidthWithPadding - 2 * paddingPx
 //                        )
 //                    )
-
-
                         drawText(
                             textMeasurer = textMeasurer,
                             text = "${monthData.day}",
@@ -251,7 +270,7 @@ fun CalendarPager(
                         )
 
 
-                        //当天画圆
+                        //当天画圆背景
                         if (monthData.isCurrentDay) {
                             drawCircle(
                                 color = Color.LightGray.copy(0.5f),
