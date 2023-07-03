@@ -11,8 +11,25 @@ import java.util.Calendar
 class ExampleUnitTest {
     @Test
     fun addition_isCorrect() {
-        printEveryDay()
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MONTH, -1)
+        val lastDayOfMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 
+        for (dayOfMonth in lastDayOfMonth downTo 1) {
+            calendar.set(Calendar.DAY_OF_MONTH, dayOfMonth)
+            println("${calendar.get(Calendar.YEAR)}-${calendar.get(Calendar.MONTH)+1}-${calendar.get(Calendar.DAY_OF_MONTH)}")
+        }
+
+    }
+
+
+
+    @Test
+    fun test(){
+        val list = listOf(1,3,1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,)
+        list.chunked(7).forEach {
+            println(it)
+        }
     }
 
     fun printEveryDay(){
