@@ -440,7 +440,7 @@ fun CalendarPagerContent(
                         ),
                         style = TextStyle(
                             textAlign = TextAlign.Center,
-                            color = textColor,
+                            color = if (textColor == Color.LightGray) Color.Black else textColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                         )
