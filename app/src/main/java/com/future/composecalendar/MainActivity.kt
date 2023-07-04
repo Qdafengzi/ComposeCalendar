@@ -5,8 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,9 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,11 +41,13 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.future.composecalendar.data.CalendarData
+import com.future.composecalendar.data.MonthEntity
+import com.future.composecalendar.data.WeekEntity
 import com.future.composecalendar.ui.theme.ComposeCalendarTheme
 import com.future.composecalendar.utils.XLogger
 import com.future.composecalendar.viewmodel.HomeAction
@@ -86,6 +87,14 @@ fun Calendar(homeViewModel: HomeViewModel = viewModel()) {
             homeViewModel = homeViewModel,
             textMeasurerAndTextSize = textMeasurerAndTextSize
         )
+
+        Box(
+            modifier = Modifier
+                .height(50.dp)
+                .background(color = Color.Red)
+        ) {
+            Text(text = "啦啦啦")
+        }
     }
 }
 
@@ -159,7 +168,9 @@ fun CalendarPager(
 ) {
     XLogger.d("CalendarPager==================>")
     val homeUiState = homeViewModel.homeUiState.collectAsState()
-    val calendarList = homeUiState.value.calendarList
+    val monthEntityList = homeUiState.value.monthEntityList
+    val weekEntityList = homeUiState.value.weekEntityList
+    val weekModel = homeUiState.value.weekModel
 
 //    LaunchedEffect(key1 = pagerState.currentPage, block = {
 //        XLogger.d("=======>${pagerState.currentPage}")
@@ -170,25 +181,38 @@ fun CalendarPager(
     UpdatePagerState(homeViewModel, pagerState)
 
     HorizontalPager(
-        pageCount = calendarList.size,
+        pageCount = if (weekModel) weekEntityList.size else monthEntityList.size,
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight(),
     ) {
         XLogger.d(" page Index========>$it")
-        CalendarPagerContent(homeViewModel, textMeasurerAndTextSize, calendarData = {
-            calendarList[it]
-        })
+
+
+        CalendarPagerContent(
+            homeViewModel = homeViewModel,
+            textMeasurerAndTextSize = textMeasurerAndTextSize,
+            monthEntity = if (weekModel) null else monthEntityList[it],
+            weekEntity = if (weekModel) weekEntityList[it] else null,
+        )
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun UpdatePagerState(homeViewModel: HomeViewModel, pagerState: PagerState) {
-    LaunchedEffect(key1 = pagerState.targetPage, block = {
-        homeViewModel.dispatch(HomeAction.UpdateCurrentPage(page = pagerState.targetPage))
+    val homeUIState = homeViewModel.homeUiState.collectAsState().value
+    LaunchedEffect(key1 = homeUIState.needScrollPage, block = {
+        XLogger.d("滑动到：${homeUIState.needScrollPage}页")
+        pagerState.scrollToPage(homeUIState.needScrollPage)
     })
+
+
+    //TODO: 触发 问题
+    LaunchedEffect(key1 = pagerState.targetPage, key2 = homeUIState.needScrollPage){
+        homeViewModel.dispatch(HomeAction.UpdateCurrentPage(page = pagerState.targetPage))
+    }
 }
 
 
@@ -197,20 +221,13 @@ fun UpdatePagerState(homeViewModel: HomeViewModel, pagerState: PagerState) {
 fun CalendarPagerContent(
     homeViewModel: HomeViewModel,
     textMeasurerAndTextSize: Pair<TextMeasurer, IntSize>,
-    calendarData: () -> CalendarData
-) {
+    monthEntity: MonthEntity?,
+    weekEntity: WeekEntity?,
+
+    ) {
     XLogger.d("CalendarContent======>")
     val homeUiState = homeViewModel.homeUiState.collectAsState().value
-    val expand = homeUiState.expand
-
-    val monthListWithTrim by remember {
-        mutableStateOf(calendarData().monthListWithTrim)
-    }
-
-    //计算最大的列 跨度 一年的几周就是最大的列
-    val maxColumn = calendarData().monthList.groupBy { monthData ->
-        monthData.weekOfYear
-    }.size
+    val weekModel = homeUiState.weekModel
 
     val textMeasurer = textMeasurerAndTextSize.first
     val textSize = textMeasurerAndTextSize.second
@@ -219,127 +236,170 @@ fun CalendarPagerContent(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val clickDay = homeUiState.clickDay
 
-    val height = if(expand) (maxColumn * screenWidthDp / 7f).dp else (screenWidthDp / 7f).dp
+    val height: Dp? = if (weekModel) {
+        (screenWidthDp / 7f).dp
+    } else {
+        monthEntity?.let {
+            (monthEntity.monthList.size / 7 * (screenWidthDp / 7f)).dp
+        }
+    }
+
+    XLogger.d("height=====monthList:${height?.value}")
 
     Canvas(modifier = Modifier
         .fillMaxWidth()
-        .height(height)
+        .height(height ?: 1.dp)
+//        .background(color = Color.Magenta)
+//        .animateContentSize()
         .pointerInput(Unit) {
             detectTapGestures(onTap = { offset ->
-                XLogger.d("onTap x y =========>${offset.x} ${offset.y}")
-                val perWidthWithDp = screenWidthDp / 7f
-                val widthIndex = ceil(offset.x / perWidthWithDp.dp.toPx()).toInt()
-                val heightIndex = ceil(offset.y / perWidthWithDp.dp.toPx()).toInt()
-
-//                    XLogger.d("========>$widthIndex $heightIndex")
-                val monthData = monthListWithTrim[(heightIndex - 1) * 7 + widthIndex - 1]
-                XLogger.d("click========>${monthData.year}-${monthData.month + 1}-${monthData.day}")
-                homeViewModel.dispatch(
-                    HomeAction.ItemClick(
-                        Triple(
-                            monthData.year,
-                            monthData.month,
-                            monthData.day
+                if (weekModel) {
+                    weekEntity?.let {
+                        XLogger.d("onTap x y =========>${offset.x} ${offset.y}")
+                        val perWidthWithDp = screenWidthDp / 7f
+                        val widthIndex = ceil(offset.x / perWidthWithDp.dp.toPx()).toInt()
+                        val weekData = weekEntity.weekList[widthIndex - 1]
+                        XLogger.d("click========>${weekData.year}-${weekData.month + 1}-${weekData.day}")
+                        homeViewModel.dispatch(
+                            HomeAction.ItemClick(Triple(weekData.year, weekData.month, weekData.day))
                         )
-                    )
-                )
+                    }
+                } else {
+                    monthEntity?.let {
+                        XLogger.d("onTap x y =========>${offset.x} ${offset.y}")
+                        val perWidthWithDp = screenWidthDp / 7f
+                        val widthIndex = ceil(offset.x / perWidthWithDp.dp.toPx()).toInt()
+                        val heightIndex = ceil(offset.y / perWidthWithDp.dp.toPx()).toInt()
+                        val monthData =
+                            monthEntity.monthList[(heightIndex - 1) * 7 + widthIndex - 1]
+                        XLogger.d("click========>${monthData.year}-${monthData.month + 1}-${monthData.day}")
+                        homeViewModel.dispatch(HomeAction.ItemClick(Triple(monthData.year,monthData.month,monthData.day))
+                        )
+                    }
+                }
             })
         }
         .pointerInput(Unit) {
             detectVerticalDragGestures { change, dragAmount ->
-                //TODO:竖直方向滑动 进入周历模式
                 XLogger.d("detectDragGestures=======>change:${change.position.y}  dragAmount:${dragAmount}")
                 if (dragAmount >= 20) {
-                    homeViewModel.dispatch(HomeAction.SetExpand(true))
+                    homeViewModel.dispatch(HomeAction.SetCalendarModel(false))
                 }
                 if (dragAmount <= -20) {
-                    homeViewModel.dispatch(HomeAction.SetExpand(false))
+                    homeViewModel.dispatch(HomeAction.SetCalendarModel(true))
                 }
             }
         }, onDraw = {
 
         val perWidthWithPadding = this.size.width / 7f
 
-        monthListWithTrim.forEachIndexed { index, monthData ->
-            if(expand){
-                val week = index % 7
-                val rowIndex = index / 7
-                //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "${monthData.day}",
-                    size = Size(
-                        perWidthWithPadding - 2 * paddingPx,
-                        perWidthWithPadding - 2 * paddingPx
-                    ),
-                    topLeft = Offset(
-                        week * perWidthWithPadding,
-                        rowIndex * perWidthWithPadding
-                                //定位到中间位置
-                                + perWidthWithPadding * 0.5f
-                                //减去文字的高度
-                                - textSize.height / 2f
-                    ),
-                    style = TextStyle(
-                        textAlign = TextAlign.Center,
-                        color = monthData.color,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                )
-
-
-                val currentDayTriple = Triple(monthData.year, monthData.month, monthData.day)
-
-                if (clickDay == currentDayTriple) {
-                    drawCircle(
-                        color = Color.Blue.copy(0.5f),
-                        radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
-                        center = Offset(
-                            week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                            rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+        if (!weekModel) {
+            monthEntity?.let {
+                monthEntity.monthList.forEachIndexed { index, monthData ->
+                    XLogger.d("月历模式")
+                    val week = index % 7
+                    val rowIndex = index / 7
+                    //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
+                    drawText(
+                        textMeasurer = textMeasurer,
+                        text = "${monthData.day}",
+                        size = Size(
+                            perWidthWithPadding - 2 * paddingPx,
+                            perWidthWithPadding - 2 * paddingPx
                         ),
-                    )
-                } else if (monthData.isCurrentDay) {
-                    //当天画圆背景
-                    drawCircle(
-                        color = Color.LightGray.copy(0.5f),
-                        radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
-                        center = Offset(
-                            week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                            rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                        topLeft = Offset(
+                            week * perWidthWithPadding,
+                            rowIndex * perWidthWithPadding
+                                    //定位到中间位置
+                                    + perWidthWithPadding * 0.5f
+                                    //减去文字的高度
+                                    - textSize.height / 2f
                         ),
+                        style = TextStyle(
+                            textAlign = TextAlign.Center,
+                            color = monthData.color,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                     )
+
+
+                    val currentDayTriple = Triple(monthData.year, monthData.month, monthData.day)
+
+                    if (clickDay == currentDayTriple) {
+                        drawCircle(
+                            color = Color.Blue.copy(0.5f),
+                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            center = Offset(
+                                week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                                rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                            ),
+                        )
+                    } else if (monthData.isCurrentDay) {
+                        //当天画圆背景
+                        drawCircle(
+                            color = Color.LightGray.copy(0.5f),
+                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            center = Offset(
+                                week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                                rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                            ),
+                        )
+                    }
                 }
-            }else{
-             //一行 当前的日期
-                val week = index % 7
-                val rowIndex = index / 7
-                //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "${monthData.day}",
-                    size = Size(
-                        perWidthWithPadding - 2 * paddingPx,
-                        perWidthWithPadding - 2 * paddingPx
-                    ),
-                    topLeft = Offset(
-                        week * perWidthWithPadding,
-                        rowIndex * perWidthWithPadding
-                                //定位到中间位置
-                                + perWidthWithPadding * 0.5f
-                                //减去文字的高度
-                                - textSize.height / 2f
-                    ),
-                    style = TextStyle(
-                        textAlign = TextAlign.Center,
-                        color = monthData.color,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
+            }
+
+        } else {
+            XLogger.d("周历模式")
+            weekEntity?.let {
+                weekEntity.weekList.forEachIndexed { index, dayEntity ->
+                    XLogger.d("周历模式weekList")
+                    //一行 当前的日期
+                    //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
+                    drawText(
+                        textMeasurer = textMeasurer,
+                        text = "${dayEntity.day}",
+                        size = Size(
+                            perWidthWithPadding - 2 * paddingPx,
+                            perWidthWithPadding - 2 * paddingPx
+                        ),
+                        topLeft = Offset(
+                            index * perWidthWithPadding,
+                            perWidthWithPadding * 0.5f
+                                    //减去文字的高度
+                                    - textSize.height / 2f
+                        ),
+                        style = TextStyle(
+                            textAlign = TextAlign.Center,
+                            color = Color.Black,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                     )
-                )
 
+                    val currentDayTriple = Triple(dayEntity.year, dayEntity.month, dayEntity.day)
 
+                    if (clickDay == currentDayTriple) {
+                        drawCircle(
+                            color = Color.Blue.copy(0.5f),
+                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            center = Offset(
+                                index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                                perWidthWithPadding / 2f
+                            ),
+                        )
+                    } else if (dayEntity.isCurrentDay) {
+                        //当天画圆背景
+                        drawCircle(
+                            color = Color.LightGray.copy(0.5f),
+                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            center = Offset(
+                                index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                                 perWidthWithPadding / 2f
+                            ),
+                        )
+                    }
+                }
             }
         }
     })

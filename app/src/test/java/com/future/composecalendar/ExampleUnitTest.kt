@@ -31,13 +31,13 @@ class ExampleUnitTest {
 
     @Test
     fun test() {
-        repeat(7-1){
+        repeat(5){
             println("$it")
         }
     }
 
 
-    data class MonthData(
+    data class CalendarEntity(
         val year: Int,
         val month: Int,
         val day: Int,
@@ -49,7 +49,7 @@ class ExampleUnitTest {
 
     @Test
     fun initData2() {
-        val list = mutableListOf<MonthData>()
+        val list = mutableListOf<CalendarEntity>()
 
         val calendar = Calendar.getInstance()
 
@@ -78,7 +78,7 @@ class ExampleUnitTest {
                 }
             }
 
-            list.add(MonthData(
+            list.add(CalendarEntity(
                 year = year,
                 month = month,
                 day = dayOfMonth,
@@ -111,7 +111,7 @@ class ExampleUnitTest {
                     }
                 }
 
-                list.add(0,MonthData(
+                list.add(0,CalendarEntity(
                     year = year1,
                     month = month1,
                     day = day1,
@@ -145,7 +145,7 @@ class ExampleUnitTest {
                     }
                 }
 
-                list.add(MonthData(
+                list.add(CalendarEntity(
                     year = year1,
                     month = month1,
                     day = day1,
