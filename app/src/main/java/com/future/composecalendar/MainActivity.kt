@@ -3,11 +3,13 @@ package com.future.composecalendar
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -130,7 +132,7 @@ fun YearAndMonth(homeViewModel: HomeViewModel) {
     val homeUiState = homeViewModel.homeUiState.collectAsState(initial = HomeUIState()).value
     val clickDay = homeUiState.clickDay
     XLogger.d("YearAndMonth=======================>${clickDay}")
-
+    //TODO：点击回到  年月日
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -138,24 +140,29 @@ fun YearAndMonth(homeViewModel: HomeViewModel) {
         verticalAlignment = Alignment.Bottom
     ) {
         Text(
-            text = "${clickDay.first}年",
+            text = "${clickDay.month + 1}月${clickDay.day}日",
             fontSize = 30.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.Black
         )
-        Text(
-            text = "${clickDay.second + 1}月",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.Black
-        )
 
-        Text(
-            text = "${clickDay.third}日",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.Black
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = "${clickDay.year.toString().substring(2)}年",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black
+            )
+
+            Text(
+                text = "周${clickDay.week}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black
+            )
+        }
     }
 }
 
@@ -176,6 +183,7 @@ fun CalendarPager(
 //        XLogger.d("=======>${pagerState.currentPage}")
 //        //TODO：监听 滑动到<=2 或 size-2 的时候追加 日期数据
 //    })
+
     val pagerState = rememberPagerState()
 
     UpdatePagerState(homeViewModel, pagerState)
@@ -187,9 +195,7 @@ fun CalendarPager(
             .fillMaxWidth()
             .wrapContentHeight(),
     ) {
-        XLogger.d(" page Index========>$it")
-
-
+        XLogger.d("page Index========>$it")
         CalendarPagerContent(
             homeViewModel = homeViewModel,
             textMeasurerAndTextSize = textMeasurerAndTextSize,
@@ -202,6 +208,7 @@ fun CalendarPager(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun UpdatePagerState(homeViewModel: HomeViewModel, pagerState: PagerState) {
+    XLogger.d("================>UpdatePagerState")
     val homeUIState = homeViewModel.homeUiState.collectAsState().value
     LaunchedEffect(key1 = homeUIState.needScrollPage, block = {
         XLogger.d("滑动到：${homeUIState.needScrollPage}页")
@@ -210,7 +217,7 @@ fun UpdatePagerState(homeViewModel: HomeViewModel, pagerState: PagerState) {
 
 
     //TODO: 触发 问题
-    LaunchedEffect(key1 = pagerState.targetPage, key2 = homeUIState.needScrollPage){
+    LaunchedEffect(key1 = pagerState.targetPage, key2 = homeUIState.needScrollPage) {
         homeViewModel.dispatch(HomeAction.UpdateCurrentPage(page = pagerState.targetPage))
     }
 }
@@ -250,7 +257,7 @@ fun CalendarPagerContent(
         .fillMaxWidth()
         .height(height ?: 1.dp)
 //        .background(color = Color.Magenta)
-//        .animateContentSize()
+        .animateContentSize()
         .pointerInput(Unit) {
             detectTapGestures(onTap = { offset ->
                 if (weekModel) {
@@ -260,9 +267,7 @@ fun CalendarPagerContent(
                         val widthIndex = ceil(offset.x / perWidthWithDp.dp.toPx()).toInt()
                         val weekData = weekEntity.weekList[widthIndex - 1]
                         XLogger.d("click========>${weekData.year}-${weekData.month + 1}-${weekData.day}")
-                        homeViewModel.dispatch(
-                            HomeAction.ItemClick(Triple(weekData.year, weekData.month, weekData.day))
-                        )
+                        homeViewModel.dispatch(HomeAction.ItemClick(weekData))
                     }
                 } else {
                     monthEntity?.let {
@@ -273,8 +278,7 @@ fun CalendarPagerContent(
                         val monthData =
                             monthEntity.monthList[(heightIndex - 1) * 7 + widthIndex - 1]
                         XLogger.d("click========>${monthData.year}-${monthData.month + 1}-${monthData.day}")
-                        homeViewModel.dispatch(HomeAction.ItemClick(Triple(monthData.year,monthData.month,monthData.day))
-                        )
+                        homeViewModel.dispatch(HomeAction.ItemClick(monthData))
                     }
                 }
             })
@@ -300,6 +304,36 @@ fun CalendarPagerContent(
                     val week = index % 7
                     val rowIndex = index / 7
                     //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
+                    val textColor =
+                        if (monthData.year == clickDay.year && monthData.month == clickDay.month && monthData.day == clickDay.day) {
+                            Color.White
+                        } else if (monthData.isWeekend && monthData.month == monthEntity.month) {
+                            Color.Red
+                        } else {
+                            monthData.color
+                        }
+
+                    val backgroundColor: Color = if (monthData.year == clickDay.year && monthData.month == clickDay.month && monthData.day == clickDay.day) {
+                        //点击的画圆背景
+                        Color.Blue.copy(0.5f)
+                    } else if (monthData.isCurrentDay) {
+                        //当天画圆背景
+                        Color.LightGray.copy(0.5f)
+                    }else {
+                        Color.Transparent
+                    }
+
+
+
+                    drawCircle(
+                        color = backgroundColor,
+                        radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                        center = Offset(
+                            week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                            rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                        ),
+                    )
+
                     drawText(
                         textMeasurer = textMeasurer,
                         text = "${monthData.day}",
@@ -317,33 +351,41 @@ fun CalendarPagerContent(
                         ),
                         style = TextStyle(
                             textAlign = TextAlign.Center,
-                            color = monthData.color,
+                            color = textColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                         )
                     )
 
-
-                    val currentDayTriple = Triple(monthData.year, monthData.month, monthData.day)
-
-                    if (clickDay == currentDayTriple) {
+                    if(monthData.isCurrentDay){
+                        //今天的背景
+                        val todayRadius = (perWidthWithPadding - 2 * paddingPx)/8f
                         drawCircle(
-                            color = Color.Blue.copy(0.5f),
-                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            color = Color.White,
+                            radius =todayRadius,
                             center = Offset(
-                                week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                                rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                                week * perWidthWithPadding + perWidthWithPadding * 0.75f + todayRadius,
+                                rowIndex * perWidthWithPadding +todayRadius
                             ),
                         )
-                    } else if (monthData.isCurrentDay) {
-                        //当天画圆背景
-                        drawCircle(
-                            color = Color.LightGray.copy(0.5f),
-                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
-                            center = Offset(
-                                week * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                                rowIndex * perWidthWithPadding - paddingPx + perWidthWithPadding / 2f
+                        //今天的文字 大小是0.75倍的宽度
+                        drawText(
+                            textMeasurer = textMeasurer,
+                            text = "今",
+                            size = Size(
+                                (perWidthWithPadding - 2 * paddingPx)/4f,
+                                (perWidthWithPadding - 2 * paddingPx)/4f
                             ),
+                            topLeft = Offset(
+                                week * perWidthWithPadding + perWidthWithPadding*0.75f,
+                                rowIndex * perWidthWithPadding
+                            ),
+                            style = TextStyle(
+                                textAlign = TextAlign.Center,
+                                color = Color.Magenta,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         )
                     }
                 }
@@ -356,6 +398,33 @@ fun CalendarPagerContent(
                     XLogger.d("周历模式weekList")
                     //一行 当前的日期
                     //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
+                    val textColor = if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
+                        Color.White
+                    } else if (dayEntity.isWeekend && dayEntity.month == weekEntity.month) {
+                        Color.Red
+                    } else {
+                        dayEntity.color
+                    }
+
+                    val backgroundColor: Color = if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
+                        //点击的画圆背景
+                        Color.Blue.copy(0.5f)
+                    } else if (dayEntity.isCurrentDay) {
+                        //当天画圆背景
+                        Color.LightGray.copy(0.5f)
+                    }else {
+                        Color.Transparent
+                    }
+
+                    drawCircle(
+                        color =backgroundColor,
+                        radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                        center = Offset(
+                            index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
+                            perWidthWithPadding / 2f
+                        ),
+                    )
+
                     drawText(
                         textMeasurer = textMeasurer,
                         text = "${dayEntity.day}",
@@ -371,32 +440,41 @@ fun CalendarPagerContent(
                         ),
                         style = TextStyle(
                             textAlign = TextAlign.Center,
-                            color = Color.Black,
+                            color = textColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                         )
                     )
 
-                    val currentDayTriple = Triple(dayEntity.year, dayEntity.month, dayEntity.day)
-
-                    if (clickDay == currentDayTriple) {
+                    if(dayEntity.isCurrentDay){
+                        //今天的背景
+                        val todayRadius = (perWidthWithPadding - 2 * paddingPx)/8f
                         drawCircle(
-                            color = Color.Blue.copy(0.5f),
-                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
+                            color = Color.White,
+                            radius =todayRadius,
                             center = Offset(
-                                index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                                perWidthWithPadding / 2f
+                                index * perWidthWithPadding + perWidthWithPadding * 0.75f + todayRadius,
+                                todayRadius
                             ),
                         )
-                    } else if (dayEntity.isCurrentDay) {
-                        //当天画圆背景
-                        drawCircle(
-                            color = Color.LightGray.copy(0.5f),
-                            radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
-                            center = Offset(
-                                index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
-                                 perWidthWithPadding / 2f
+                        //今天的文字 大小是0.75倍的宽度
+                        drawText(
+                            textMeasurer = textMeasurer,
+                            text = "今",
+                            size = Size(
+                                (perWidthWithPadding - 2 * paddingPx)/4f,
+                                (perWidthWithPadding - 2 * paddingPx)/4f
                             ),
+                            topLeft = Offset(
+                                index * perWidthWithPadding + perWidthWithPadding*0.75f,
+                                0f
+                            ),
+                            style = TextStyle(
+                                textAlign = TextAlign.Center,
+                                color = Color.Magenta,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         )
                     }
                 }

@@ -13,7 +13,8 @@ import java.util.Calendar
 
 
 data class HomeUIState(
-    val clickDay: Triple<Int, Int, Int> = Triple(0, 0, 0),
+    //点击的位置 当前日期
+    val clickDay: DayEntity = DayEntity(year = 2023),
 
     val weekModel: Boolean = false,//周历模式
 
@@ -24,7 +25,7 @@ data class HomeUIState(
 )
 
 sealed class HomeAction {
-    data class ItemClick(val day: Triple<Int, Int, Int>) : HomeAction()
+    data class ItemClick(val day: DayEntity) : HomeAction()
 
     data class UpdateCurrentPage(val page: Int) : HomeAction()
 
@@ -63,23 +64,39 @@ class HomeViewModel : ViewModel() {
                             //重置点击的数据
                             //不同的月份 点击事件默认 到当月的1号
                             if (calendarData.month != month) {
+                                calendar[calendarData.year,calendarData.month] = 1
+                                val week = getWeek(calendar)
+
                                 _homeUIState.update {
                                     it.copy(
-                                        clickDay = Triple(
-                                            calendarData.year,
-                                            calendarData.month,
-                                            1
+                                        clickDay = DayEntity(
+                                            year = calendar.get(Calendar.YEAR),
+                                            month = calendar.get(Calendar.MONTH),
+                                            day = 1,
+                                            week = week,
+                                            isCurrentDay = false,
+                                            isCurrentMonth = false,
+                                            isWeekend = week == 6 || week == 7,
+                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                                            color = Color.LightGray
                                         )
                                     )
                                 }
                             } else if (calendarData.year == year) {
                                 //如果是当月 则定位到 今天的位置
+                                val week = getWeek(calendar)
                                 _homeUIState.update {
                                     it.copy(
-                                        clickDay = Triple(
-                                            year,
-                                            month,
-                                            day
+                                        clickDay = DayEntity(
+                                            year =year,
+                                            month = month,
+                                            day = day,
+                                            week = week,
+                                            isCurrentDay = true,
+                                            isCurrentMonth = true,
+                                            isWeekend = week == 6 || week == 7,
+                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                                            color = Color.LightGray
                                         )
                                     )
                                 }
@@ -96,23 +113,40 @@ class HomeViewModel : ViewModel() {
                             //重置点击的数据
                             //不同的月份 点击事件默认 到当月的1号
                             if (calendarData.month != month) {
+                                calendar[calendarData.year,calendarData.month] = 1
+                                val week = getWeek(calendar)
+
                                 _homeUIState.update {
                                     it.copy(
-                                        clickDay = Triple(
-                                            calendarData.year,
-                                            calendarData.month,
-                                            1
+                                        clickDay = DayEntity(
+                                            year = calendar.get(Calendar.YEAR),
+                                            month = calendar.get(Calendar.MONTH),
+                                            day = 1,
+                                            week = week,
+                                            isCurrentDay = false,
+                                            isCurrentMonth = false,
+                                            isWeekend = week == 6 || week == 7,
+                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                                            color = Color.LightGray
                                         )
                                     )
                                 }
+
                             } else if (calendarData.year == year) {
                                 //如果是当月 则定位到 今天的位置
+                                val week = getWeek(calendar)
                                 _homeUIState.update {
                                     it.copy(
-                                        clickDay = Triple(
-                                            year,
-                                            month,
-                                            day
+                                        clickDay = DayEntity(
+                                            year =year,
+                                            month = month,
+                                            day = day,
+                                            week = week,
+                                            isCurrentDay = true,
+                                            isCurrentMonth = true,
+                                            isWeekend = week == 6 || week == 7,
+                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                                            color = Color.LightGray
                                         )
                                     )
                                 }
@@ -129,9 +163,9 @@ class HomeViewModel : ViewModel() {
 
                 if (action.isWeekModel) {
                     //如果是周历 要找当前的周
-                    val year = _homeUIState.value.clickDay.first
-                    val month = _homeUIState.value.clickDay.second
-                    val day = _homeUIState.value.clickDay.third
+                    val year = _homeUIState.value.clickDay.year
+                    val month = _homeUIState.value.clickDay.month
+                    val day = _homeUIState.value.clickDay.day
 
                     if (year == 0 && month == 0 && day == 0) {
                         return
@@ -165,9 +199,9 @@ class HomeViewModel : ViewModel() {
                     }
                 }else{
                     //如果是月历 要找当前的月
-                    val year = _homeUIState.value.clickDay.first
-                    val month = _homeUIState.value.clickDay.second
-                    val day = _homeUIState.value.clickDay.third
+                    val year = _homeUIState.value.clickDay.year
+                    val month = _homeUIState.value.clickDay.month
+                    val day = _homeUIState.value.clickDay.day
 
                     if (year == 0 && month == 0 && day == 0) {
                         return
@@ -340,7 +374,7 @@ class HomeViewModel : ViewModel() {
     /**
      * 生成48个月的数据
      */
-    private fun generate48MonthData(generateDataSize: Int = 20) {
+    private fun generate48MonthData(generateDataSize: Int = 48) {
         val start = System.currentTimeMillis()
         val monthList = mutableListOf<MonthEntity>()
         val weekList = mutableListOf<WeekEntity>()
@@ -359,7 +393,6 @@ class HomeViewModel : ViewModel() {
             monthList.add(generateMonthDataPair.first)
             //周数据
             weekList.addAll(generateMonthDataPair.second)
-
         }
 
         //回到本月
@@ -545,5 +578,20 @@ class HomeViewModel : ViewModel() {
         }
 
         return Pair(MonthEntity(year = year, month = month, monthList = list), week)
+    }
+
+    private fun getWeek(calendar:Calendar): Int {
+        val isFirstSunday = calendar.firstDayOfWeek == Calendar.SUNDAY
+        var weekDay: Int = calendar.get(Calendar.DAY_OF_WEEK)
+        //若一周第一天为星期天，则-1
+        if (isFirstSunday) {
+            println("周天是第一天")
+            weekDay -= 1
+            if (weekDay == 0) {
+                weekDay = 7
+            }
+        }
+
+        return weekDay
     }
 }
