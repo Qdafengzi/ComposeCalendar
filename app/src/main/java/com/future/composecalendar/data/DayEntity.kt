@@ -18,14 +18,14 @@ data class DayEntity(
 )
 
 data class MonthEntity(
-    val year: Int,
-    val month: Int,
-    val monthList: List<DayEntity>,
+    val year: Int = 0,
+    val month: Int = 0,
+    val monthList: List<DayEntity> = listOf(),
 )
 data class WeekEntity(
-    val year: Int,
-    val month: Int,
-    val weekList : List<DayEntity>,
+    val year: Int =2023,
+    val month: Int = 2023,
+    val weekList : List<DayEntity> = listOf(),
 )
 
 

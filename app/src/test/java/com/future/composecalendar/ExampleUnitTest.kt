@@ -31,8 +31,8 @@ class ExampleUnitTest {
 
     @Test
     fun test() {
-        repeat(5){
-            println("$it")
+        repeat(500){
+
         }
     }
 

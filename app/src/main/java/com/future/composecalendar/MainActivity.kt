@@ -21,12 +21,15 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -62,16 +65,64 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ComposeCalendarTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Calendar()
+//                    SampleOne()
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SampleOne(viewModel: HomeViewModel = viewModel()) {
+//    val scope = rememberCoroutineScope()
+
+    val pagerState = rememberPagerState(initialPage = 5000)
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            // do your stuff with selected page
+            XLogger.d("snapshotFlow============>$page")
+            viewModel.getMonthData(page)
+        }
+    }
+
+//    AAAAA(homeViewModel = viewModel, pagerState = pagerState)
+    XLogger.d("HorizontalPager==========================++>")
+    HorizontalPager(state = pagerState,
+        pageCount = 10000
+    ) { page ->
+
+        XLogger.d("current Page:$page")
+        Column ( modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .background(Color.Red)){
+            viewModel.mMonthEntity.value.monthList.forEach {day->
+                Text(
+                    text = "Page: $page ${day.year}-${day.month + 1}-${day.day} 星期:${day.week}",
+                    modifier = Modifier,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AAAAA(homeViewModel: HomeViewModel,pagerState: PagerState) {
+    XLogger.d("AAAAA===========>${pagerState.currentPage}")
+
+
+
+
 }
 
 
@@ -148,7 +199,8 @@ fun YearAndMonth(homeViewModel: HomeViewModel) {
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween) {
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
             Text(
                 text = "${clickDay.year.toString().substring(2)}年",
                 fontSize = 12.sp,
@@ -313,15 +365,16 @@ fun CalendarPagerContent(
                             monthData.color
                         }
 
-                    val backgroundColor: Color = if (monthData.year == clickDay.year && monthData.month == clickDay.month && monthData.day == clickDay.day) {
-                        //点击的画圆背景
-                        Color.Blue.copy(0.5f)
-                    } else if (monthData.isCurrentDay) {
-                        //当天画圆背景
-                        Color.LightGray.copy(0.5f)
-                    }else {
-                        Color.Transparent
-                    }
+                    val backgroundColor: Color =
+                        if (monthData.year == clickDay.year && monthData.month == clickDay.month && monthData.day == clickDay.day) {
+                            //点击的画圆背景
+                            Color.Blue.copy(0.5f)
+                        } else if (monthData.isCurrentDay) {
+                            //当天画圆背景
+                            Color.LightGray.copy(0.5f)
+                        } else {
+                            Color.Transparent
+                        }
 
 
 
@@ -357,15 +410,15 @@ fun CalendarPagerContent(
                         )
                     )
 
-                    if(monthData.isCurrentDay){
+                    if (monthData.isCurrentDay) {
                         //今天的背景
-                        val todayRadius = (perWidthWithPadding - 2 * paddingPx)/8f
+                        val todayRadius = (perWidthWithPadding - 2 * paddingPx) / 8f
                         drawCircle(
                             color = Color.White,
-                            radius =todayRadius,
+                            radius = todayRadius,
                             center = Offset(
                                 week * perWidthWithPadding + perWidthWithPadding * 0.75f + todayRadius,
-                                rowIndex * perWidthWithPadding +todayRadius
+                                rowIndex * perWidthWithPadding + todayRadius
                             ),
                         )
                         //今天的文字 大小是0.75倍的宽度
@@ -373,11 +426,11 @@ fun CalendarPagerContent(
                             textMeasurer = textMeasurer,
                             text = "今",
                             size = Size(
-                                (perWidthWithPadding - 2 * paddingPx)/4f,
-                                (perWidthWithPadding - 2 * paddingPx)/4f
+                                (perWidthWithPadding - 2 * paddingPx) / 4f,
+                                (perWidthWithPadding - 2 * paddingPx) / 4f
                             ),
                             topLeft = Offset(
-                                week * perWidthWithPadding + perWidthWithPadding*0.75f,
+                                week * perWidthWithPadding + perWidthWithPadding * 0.75f,
                                 rowIndex * perWidthWithPadding
                             ),
                             style = TextStyle(
@@ -398,26 +451,28 @@ fun CalendarPagerContent(
                     XLogger.d("周历模式weekList")
                     //一行 当前的日期
                     //XLogger.d("每日的数据 ${monthData.year}-${monthData.month+1}-${monthData.day}-${monthData.color}")
-                    val textColor = if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
-                        Color.White
-                    } else if (dayEntity.isWeekend && dayEntity.month == weekEntity.month) {
-                        Color.Red
-                    } else {
-                        dayEntity.color
-                    }
+                    val textColor =
+                        if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
+                            Color.White
+                        } else if (dayEntity.isWeekend && dayEntity.month == weekEntity.month) {
+                            Color.Red
+                        } else {
+                            dayEntity.color
+                        }
 
-                    val backgroundColor: Color = if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
-                        //点击的画圆背景
-                        Color.Blue.copy(0.5f)
-                    } else if (dayEntity.isCurrentDay) {
-                        //当天画圆背景
-                        Color.LightGray.copy(0.5f)
-                    }else {
-                        Color.Transparent
-                    }
+                    val backgroundColor: Color =
+                        if (dayEntity.year == clickDay.year && dayEntity.month == clickDay.month && dayEntity.day == clickDay.day) {
+                            //点击的画圆背景
+                            Color.Blue.copy(0.5f)
+                        } else if (dayEntity.isCurrentDay) {
+                            //当天画圆背景
+                            Color.LightGray.copy(0.5f)
+                        } else {
+                            Color.Transparent
+                        }
 
                     drawCircle(
-                        color =backgroundColor,
+                        color = backgroundColor,
                         radius = (perWidthWithPadding - 2 * paddingPx) / 2f,
                         center = Offset(
                             index * perWidthWithPadding + paddingPx + perWidthWithPadding / 2f,
@@ -446,12 +501,12 @@ fun CalendarPagerContent(
                         )
                     )
 
-                    if(dayEntity.isCurrentDay){
+                    if (dayEntity.isCurrentDay) {
                         //今天的背景
-                        val todayRadius = (perWidthWithPadding - 2 * paddingPx)/8f
+                        val todayRadius = (perWidthWithPadding - 2 * paddingPx) / 8f
                         drawCircle(
                             color = Color.White,
-                            radius =todayRadius,
+                            radius = todayRadius,
                             center = Offset(
                                 index * perWidthWithPadding + perWidthWithPadding * 0.75f + todayRadius,
                                 todayRadius
@@ -462,11 +517,11 @@ fun CalendarPagerContent(
                             textMeasurer = textMeasurer,
                             text = "今",
                             size = Size(
-                                (perWidthWithPadding - 2 * paddingPx)/4f,
-                                (perWidthWithPadding - 2 * paddingPx)/4f
+                                (perWidthWithPadding - 2 * paddingPx) / 4f,
+                                (perWidthWithPadding - 2 * paddingPx) / 4f
                             ),
                             topLeft = Offset(
-                                index * perWidthWithPadding + perWidthWithPadding*0.75f,
+                                index * perWidthWithPadding + perWidthWithPadding * 0.75f,
                                 0f
                             ),
                             style = TextStyle(
