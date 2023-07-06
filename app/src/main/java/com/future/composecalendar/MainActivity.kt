@@ -82,11 +82,14 @@ fun Calendar(homeViewModel: HomeViewModel = viewModel()) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = Color.White)
-        ,
+            .background(color = Color.White),
     ) {
-        stickyHeader (key="stickyHeader"){
-            Column(modifier = Modifier.fillMaxWidth().background(color = Color.White)) {
+        stickyHeader(key = "stickyHeader") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(color = Color.White)
+            ) {
                 val textMeasurerAndTextSize = getTextMeasurerAndTextSize()
                 YearAndMonth(homeViewModel)
                 //星期
@@ -99,28 +102,31 @@ fun Calendar(homeViewModel: HomeViewModel = viewModel()) {
             }
         }
         repeat(20) {
-            item (key = it){
-                Box (
+            item(key = it) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp)
                         .height(50.dp)
                         .background(
-                            color =Color.White
+                            color = Color.White
                         ),
-                ){
-                    Row( modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            color = if (it % 2 == 0) Color.Gray.copy(alpha = 0.5f) else Color.LightGray.copy(
-                                alpha = 0.5f
-                            )
-                        ),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                color = if (it % 2 == 0) Color.Gray.copy(alpha = 0.5f) else Color.LightGray.copy(
+                                    alpha = 0.5f
+                                )
+                            ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(modifier = Modifier.padding(start = 12.dp),
+                        Icon(
+                            modifier = Modifier.padding(start = 12.dp),
                             imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null)
+                            contentDescription = null
+                        )
 
                         Text(
                             modifier = Modifier
