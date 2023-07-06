@@ -1,50 +1,43 @@
 package com.future.composecalendar.viewmodel
 
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.future.composecalendar.data.DayEntity
 import com.future.composecalendar.data.MonthEntity
 import com.future.composecalendar.data.WeekEntity
 import com.future.composecalendar.utils.XLogger
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import java.util.Calendar
 
 
 data class HomeUIState(
     //点击的位置 当前日期
-    val clickDay: DayEntity = DayEntity(year = 2023),
+    val clickDay: DayEntity = DayEntity(year = 0),
 
-    val weekModel: Boolean = false,//周历模式
+    val weekModelFlag: Boolean = false,//周历模式
 
-    val monthEntityList: List<MonthEntity> = listOf(),
-    val weekEntityList: List<WeekEntity> = listOf(),
-
+    /**
+     * 滚动到的页面
+     */
     val needScrollPage: Int = -1,
-
 
     //展示的月份的月数据
     val monthEntity: MonthEntity = MonthEntity(),
     //点击事件 周的数据
     val weekEntity: WeekEntity = WeekEntity(),
+
+    // 周历模式上一次滑动的index
+    val weekModelLastScrollIndex:Int = 0,
 )
 
 sealed class HomeAction {
-    data class ItemClick(val day: DayEntity) : HomeAction()
+    data class ItemClick(val dataIndex: Int,val pageOffset:Int) : HomeAction()
 
-    data class UpdateCurrentPage(val page: Int) : HomeAction()
+    data class SetCalendarModel(val isWeekModel: Boolean,val page: Int) : HomeAction()
 
-    data class SetCalendarModel(val isWeekModel: Boolean) : HomeAction()
-
-    data class GetMonthData(val isNextMonth: Boolean) : HomeAction()
+    data class UpdateData(val page:Int):HomeAction()
 }
 
 
@@ -53,434 +46,124 @@ class HomeViewModel : ViewModel() {
 
     val homeUiState = _homeUIState.asStateFlow()
 
-    val mMonthEntity = mutableStateOf(MonthEntity())
-
-    val mCurrentPage = mutableStateOf(1)
-    private val viewModelJob = SupervisorJob()
-    private val exceptionHandler = CoroutineExceptionHandler { _, exception ->
-        // 异常处理代码
-        XLogger.d("Caught exception: $exception")
-    }
-
-    private val ioScope = CoroutineScope(exceptionHandler + Dispatchers.IO + viewModelJob)
-
-
-
     init {
-//        initData()
         getMonthData(5000)
-//        generate48MonthData()
     }
-
 
     fun dispatch(action: HomeAction) {
         when (action) {
             is HomeAction.ItemClick -> {
-                _homeUIState.update {
-                    it.copy(clickDay = action.day)
-                }
-            }
+                if (_homeUIState.value.weekModelFlag) {
+                    val weekData = _homeUIState.value.weekEntity.dayList[action.dataIndex]
+                    XLogger.d("周历 click========>${weekData.year}-${weekData.month + 1}-${weekData.day}")
+                    _homeUIState.update {
+                        it.copy(clickDay = weekData)
+                    }
+                } else {
+                    try {
+                        //月历的点击事件 通过点击点 找到这一行周历的数据
+                        val clickData = _homeUIState.value.monthEntity.dayList[action.dataIndex]
+                        XLogger.d("月历 click========>${clickData.year}-${clickData.month + 1}-${clickData.day}")
+                        //把这一行 加入到周历的数据中
+                        val rowIndex = (action.dataIndex / 7 + if (action.dataIndex % 7 == 0) 0 else 1) - 1
+                        val (year, month) = _homeUIState.value.monthEntity
 
-            is HomeAction.UpdateCurrentPage -> {
-                if (action.page >= 0) {
-                    if (!_homeUIState.value.weekModel) {
-                        val calendar = Calendar.getInstance()
-                        val year = calendar.get(Calendar.YEAR)
-                        val month = calendar.get(Calendar.MONTH)
-                        val day = calendar.get(Calendar.DAY_OF_MONTH)
-                        if (_homeUIState.value.monthEntityList.size > action.page) {
-                            val calendarData = _homeUIState.value.monthEntityList[action.page]
-                            //重置点击的数据
-                            //不同的月份 点击事件默认 到当月的1号
-                            if (calendarData.month != month) {
-                                calendar[calendarData.year, calendarData.month] = 1
-                                val week = getWeek(calendar)
+                        val weekEntity = WeekEntity(
+                            year = year,
+                            month = month,
+                            dayList = _homeUIState.value.monthEntity.dayList.subList(
+                                rowIndex * 7,
+                                rowIndex * 7 + 7
+                            ),
+                            offset = action.pageOffset
+                        )
 
-                                _homeUIState.update {
-                                    it.copy(
-                                        clickDay = DayEntity(
-                                            year = calendar.get(Calendar.YEAR),
-                                            month = calendar.get(Calendar.MONTH),
-                                            day = 1,
-                                            week = week,
-                                            isCurrentDay = false,
-                                            isCurrentMonth = false,
-                                            isWeekend = week == 6 || week == 7,
-                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                                            color = Color.LightGray
-                                        )
-                                    )
-                                }
-                            } else if (calendarData.year == year) {
-                                //如果是当月 则定位到 今天的位置
-                                val week = getWeek(calendar)
-                                _homeUIState.update {
-                                    it.copy(
-                                        clickDay = DayEntity(
-                                            year = year,
-                                            month = month,
-                                            day = day,
-                                            week = week,
-                                            isCurrentDay = true,
-                                            isCurrentMonth = true,
-                                            isWeekend = week == 6 || week == 7,
-                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                                            color = Color.LightGray
-                                        )
-                                    )
-                                }
-                            }
+                        _homeUIState.update {
+                            it.copy(clickDay = clickData, weekEntity = weekEntity)
                         }
-                    } else {
-                        //周历的模式
-                        val calendar = Calendar.getInstance()
-                        val year = calendar.get(Calendar.YEAR)
-                        val month = calendar.get(Calendar.MONTH)
-                        val day = calendar.get(Calendar.DAY_OF_MONTH)
-                        if (_homeUIState.value.weekEntityList.size > action.page) {
-                            val calendarData = _homeUIState.value.weekEntityList[action.page]
-                            //重置点击的数据
-                            //不同的月份 点击事件默认 到当月的1号
-                            if (calendarData.month != month) {
-                                calendar[calendarData.year, calendarData.month] = 1
-                                val week = getWeek(calendar)
-
-                                _homeUIState.update {
-                                    it.copy(
-                                        clickDay = DayEntity(
-                                            year = calendar.get(Calendar.YEAR),
-                                            month = calendar.get(Calendar.MONTH),
-                                            day = 1,
-                                            week = week,
-                                            isCurrentDay = false,
-                                            isCurrentMonth = false,
-                                            isWeekend = week == 6 || week == 7,
-                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                                            color = Color.LightGray
-                                        )
-                                    )
-                                }
-
-                            } else if (calendarData.year == year) {
-                                //如果是当月 则定位到 今天的位置
-                                val week = getWeek(calendar)
-                                _homeUIState.update {
-                                    it.copy(
-                                        clickDay = DayEntity(
-                                            year = year,
-                                            month = month,
-                                            day = day,
-                                            week = week,
-                                            isCurrentDay = true,
-                                            isCurrentMonth = true,
-                                            isWeekend = week == 6 || week == 7,
-                                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                                            color = Color.LightGray
-                                        )
-                                    )
-                                }
-                            }
-                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
             }
 
             is HomeAction.SetCalendarModel -> {
-                _homeUIState.update {
-                    it.copy(weekModel = action.isWeekModel)
-                }
+                //无效切换
+                if (_homeUIState.value.weekModelFlag == action.isWeekModel) return
 
                 if (action.isWeekModel) {
-                    //如果是周历 要找当前的周
-                    val year = _homeUIState.value.clickDay.year
-                    val month = _homeUIState.value.clickDay.month
-                    val day = _homeUIState.value.clickDay.day
+                    //通过月历的点击 click Day 找到周历
+                    val clickDay = _homeUIState.value.clickDay
+
+                    val findIndex = _homeUIState.value.monthEntity.dayList.indexOfFirst {
+                        it.year== clickDay.year && it.month == clickDay.month && it.day == clickDay.day
+                    }
+
+                    if (findIndex < 0) return
+
+                    XLogger.d("月历 click========>${clickDay.year}-${clickDay.month + 1}-${clickDay.day}")
+                    //把这一行 加入到周历的数据中
+                    val rowIndex = (findIndex / 7 + if (findIndex % 7 == 0) 0 else 1) - 1
+
+                    _homeUIState.update {
+                        it.copy(
+                            weekModelFlag = true,
+                            weekModelLastScrollIndex = action.page,
+                            weekEntity = WeekEntity(
+                                year = clickDay.year,
+                                month = clickDay.month,
+                                dayList = _homeUIState.value.monthEntity.dayList.subList(
+                                    rowIndex * 7,
+                                    rowIndex * 7 + 7
+                                ),
+                                offset = action.page
+                            )
+                        )
+                    }
+                }else{
+                    //通过周历的click day 找到月历
+                    val (year, month, day) = _homeUIState.value.clickDay
+
+                    XLogger.d("++++++++++++++>${year}-${month+1}-${day}")
 
                     if (year == 0 && month == 0 && day == 0) {
                         return
                     }
-
-                    XLogger.d("查找周历：$year-${month + 1}-$day")
-
-                    var findWeekIndex = -1
-                    run breaking@{
-                        _homeUIState.value.weekEntityList.forEachIndexed { index, weekEntity ->
-                            if (year != weekEntity.year || month != weekEntity.month) {
-                                return@forEachIndexed
-                            }
-                            weekEntity.weekList.forEach {
-                                if (year == it.year && month == it.month && it.day == day) {
-                                    XLogger.d("${index} 查找周历=========>${it.year}-${it.month + 1}-${it.day}")
-                                    findWeekIndex = index
-                                    return@breaking
-                                }
-                            }
-                        }
-                    }
-
-
-                    if (findWeekIndex >= 0) {
-                        //找到
-                        XLogger.d("周历的那一天 在Index:$findWeekIndex")
-                        _homeUIState.update {
-                            it.copy(needScrollPage = findWeekIndex)
-                        }
-                    }
-                } else {
-                    //如果是月历 要找当前的月
-                    val year = _homeUIState.value.clickDay.year
-                    val month = _homeUIState.value.clickDay.month
-                    val day = _homeUIState.value.clickDay.day
-
-                    if (year == 0 && month == 0 && day == 0) {
-                        return
-                    }
-
                     XLogger.d("查找月历：$year-${month + 1}-$day")
 
-                    var findMonthIndex = -1
-                    run breaking@{
-                        _homeUIState.value.monthEntityList.forEachIndexed { index, monthEntity ->
-                            if (year != monthEntity.year || month != monthEntity.month) {
-                                return@forEachIndexed
-                            }
-                            monthEntity.monthList.forEach {
-                                if (year == it.year && month == it.month && it.day == day) {
-                                    XLogger.d("${index} 查找月历=========>${it.year}-${it.month + 1}-${it.day}")
-                                    findMonthIndex = index
-                                    return@breaking
-                                }
-                            }
-                        }
+                    val calendar = Calendar.getInstance()
+                    val todayYear = calendar.get(Calendar.YEAR)
+                    val todayMonth = calendar.get(Calendar.MONTH)
+
+                    //月份的跨度
+                    val yearDiff: Int = year - todayYear
+                    val monthDiff: Int = month - todayMonth
+                    val totalMonthDiff = yearDiff * 12 + monthDiff
+
+                    _homeUIState.update {
+                        it.copy(
+                            weekModelFlag = false,
+                            weekModelLastScrollIndex = action.page,
+                            needScrollPage = totalMonthDiff + 5000)
                     }
 
-                    if (findMonthIndex >= 0) {
-                        //找到
-                        XLogger.d("周历的那一天 在Index:$findMonthIndex")
-                        _homeUIState.update {
-                            it.copy(needScrollPage = findMonthIndex)
-                        }
-                    }
+                    // val offset = currentPage - 5000
+                    XLogger.d("totalMonthDiff=============>${totalMonthDiff + 5000}")
+                    getMonthData(totalMonthDiff + 5000, true)
                 }
             }
 
-            is HomeAction.GetMonthData -> {
-                if(action.isNextMonth) getNextMonthData() else getPreMonthData()
+            is HomeAction.UpdateData->{
+                if(_homeUIState.value.weekModelFlag){
+                    //周历 更新数据
+                    getWeekData(action.page)
+                }else{
+                    getMonthData(action.page)
+                }
             }
         }
     }
 
-
-    /**
-     * 生成48个月的数据
-     */
-    private fun generate48MonthData(generateDataSize: Int = 48) {
-        val start = System.currentTimeMillis()
-        val monthList = mutableListOf<MonthEntity>()
-        val weekList = mutableListOf<WeekEntity>()
-
-        val calendar = Calendar.getInstance()
-
-        val todayCalendar = Calendar.getInstance()
-        val todayYear = todayCalendar.get(Calendar.YEAR)
-        val todayMonth = todayCalendar.get(Calendar.MONTH)
-
-        repeat(generateDataSize / 2) {
-            calendar.add(Calendar.MONTH, if (it == 0) 0 else 1)
-            val generateMonthDataPair = generateMonthData(calendar, todayCalendar)
-
-            //月数据
-            monthList.add(generateMonthDataPair.first)
-            //周数据
-            weekList.addAll(generateMonthDataPair.second)
-        }
-
-        //回到本月
-        calendar[todayYear, todayMonth] = 1
-
-        repeat(generateDataSize / 2) {
-            calendar.add(Calendar.MONTH, -1)
-
-            val generateMonthDataPair = generateMonthData(calendar, todayCalendar)
-
-
-            //月数据
-            monthList.add(0, generateMonthDataPair.first)
-            //周数据
-            weekList.addAll(0, generateMonthDataPair.second)
-        }
-
-
-        _homeUIState.update {
-            it.copy(
-                monthEntityList = monthList,
-                weekEntityList = weekList,
-                needScrollPage = generateDataSize / 2
-            )
-        }
-
-
-        val end = System.currentTimeMillis()
-        monthList.forEach {
-            it.monthList.forEach {
-                XLogger.d("monthList::: ${it.year}-${it.month + 1}-${it.day}")
-            }
-        }
-
-        weekList.forEach {
-            it.weekList.forEachIndexed { index, dayEntity ->
-                XLogger.d("weekList::: ${dayEntity.year}-${dayEntity.month + 1}-${dayEntity.day}")
-            }
-        }
-
-        val end2 = System.currentTimeMillis()
-        println("====耗时========>${end2 - start}  ${end - start}")
-
-    }
-
-    /**
-     * 根据年月日 生成数据
-     */
-    private fun generateMonthData(
-        calendar: Calendar,
-        todayCalendar: Calendar
-    ): Pair<MonthEntity, MutableList<WeekEntity>> {
-        val list = mutableListOf<DayEntity>()
-        val year = calendar.get(Calendar.YEAR)
-        val month = calendar.get(Calendar.MONTH)
-
-        val todayYear = todayCalendar.get(Calendar.YEAR)
-        val todayMonth = todayCalendar.get(Calendar.MONTH)
-        val todayDay = todayCalendar.get(Calendar.DAY_OF_MONTH)
-
-        //一周第一天是否为星期天
-        val isFirstSunday = calendar.firstDayOfWeek == Calendar.SUNDAY
-
-        for (dayOfMonth in 1..calendar.getActualMaximum(Calendar.DAY_OF_MONTH)) {
-            calendar[year, month] = dayOfMonth
-            //获取周几
-            var weekDay: Int = calendar.get(Calendar.DAY_OF_WEEK)
-            //若一周第一天为星期天，则-1
-            if (isFirstSunday) {
-                println("周天是第一天")
-                weekDay -= 1
-                if (weekDay == 0) {
-                    weekDay = 7
-                }
-            }
-
-            list.add(
-                DayEntity(
-                    year = year,
-                    month = month,
-                    day = dayOfMonth,
-                    week = weekDay,
-                    isCurrentDay = (year == todayYear && month == todayMonth && dayOfMonth == todayDay),
-                    isCurrentMonth = true,
-                    isWeekend = weekDay == 6 || weekDay == 7,
-                    weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                    color = if (year == todayYear && month == todayMonth && dayOfMonth == todayDay) Color.Red else Color.Black
-                )
-            )
-        }
-
-
-
-        if (list.first().week != 1) {
-            //回到当月的第一天
-            calendar.set(year, month, 1)
-            repeat(list.first().week - 1) {
-                println("=====>补充前面的数据")
-                calendar.add(Calendar.DAY_OF_MONTH, -1)
-
-                var weekDay: Int = calendar.get(Calendar.DAY_OF_WEEK)
-                val year1: Int = calendar.get(Calendar.YEAR)
-                val month1: Int = calendar.get(Calendar.MONTH)
-                val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
-                //若一周第一天为星期天，则-1
-                if (isFirstSunday) {
-//                    println("周天是第一天")
-                    weekDay -= 1
-                    if (weekDay == 0) {
-                        weekDay = 7
-                    }
-                }
-
-                list.add(
-                    0, DayEntity(
-                        year = year1,
-                        month = month1,
-                        day = day1,
-                        week = weekDay,
-                        isCurrentDay = false,
-                        isCurrentMonth = false,
-                        isWeekend = weekDay == 6 || weekDay == 7,
-                        weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                        color = Color.LightGray
-                    )
-                )
-            }
-        }
-
-        //
-        if (list.last().week != 7) {
-            //回到本月第一天
-            calendar[year, month] = 1
-            //回到当月最后一天
-            val lastDayOfMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-            calendar[year, month] = lastDayOfMonth
-
-            repeat(7 - list.last().week) {
-                calendar.add(Calendar.DAY_OF_MONTH, 1)
-                var weekDay: Int = calendar.get(Calendar.DAY_OF_WEEK)
-                val year1: Int = calendar.get(Calendar.YEAR)
-                val month1: Int = calendar.get(Calendar.MONTH)
-                val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
-                //若一周第一天为星期天，则-1
-                if (isFirstSunday) {
-                    weekDay -= 1
-                    if (weekDay == 0) {
-                        weekDay = 7
-                    }
-                }
-
-                list.add(
-                    DayEntity(
-                        year = year1,
-                        month = month1,
-                        day = day1,
-                        week = weekDay,
-                        isCurrentDay = false,
-                        isCurrentMonth = false,
-                        isWeekend = weekDay == 6 || weekDay == 7,
-                        weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                        color = Color.LightGray
-                    )
-                )
-                println("添加的数据=====>${year1}-${month1 + 1}-${day1}周:${weekDay}")
-            }
-        }
-
-//        list.forEach {
-//            println("=====>${it.year}-${it.month + 1}-${it.day}周:${it.week}")
-//        }
-
-        calendar[year, month] = 1
-
-        val week: MutableList<WeekEntity> = mutableListOf()
-        list.chunked(7).forEach {
-            week.add(
-                WeekEntity(
-                    year = year,
-                    month = month,
-                    weekList = it
-                )
-            )
-        }
-
-        return Pair(MonthEntity(year = year, month = month, monthList = list), week)
-    }
 
     private fun getWeek(calendar: Calendar): Int {
         val isFirstSunday = calendar.firstDayOfWeek == Calendar.SUNDAY
@@ -532,138 +215,292 @@ class HomeViewModel : ViewModel() {
      * @param year year
      * @return 是否是闰年
      */
-    fun isLeapYear(year: Int): Boolean {
+    private fun isLeapYear(year: Int): Boolean {
         return year % 4 == 0 && year % 100 != 0 || year % 400 == 0
     }
 
 
-    /**
-     * 获取下一个月份的数据
-     */
-     fun getNextMonthData() {
+    private fun getWeekData(currentPage: Int = 0) {
+        XLogger.d("---------------->getWeekData")
+        var weekEntity = WeekEntity()
 
-    }
+        val calendar = Calendar.getInstance()
+        val todayCalendar = Calendar.getInstance()
+        val todayYear = todayCalendar.get(Calendar.YEAR)
+        val todayMonth = todayCalendar.get(Calendar.MONTH)
+        val todayDay = todayCalendar.get(Calendar.DAY_OF_MONTH)
 
-    /**
-     * 获取上一个月份的数据
-     */
-     fun getPreMonthData(){
-    }
+        val weekList: MutableList<DayEntity> = mutableListOf()
 
-    /**
-     * 获取月份数据
-     * @param offset 月份偏移量
-     */
-     fun getMonthData(
-        currentPage: Int = 0,
-    ) {
-         val offset = currentPage-5000
+        if(_homeUIState.value.weekEntity.dayList.isNotEmpty()){
+            //如果之前的数据不为空 说明已经赋值
+            if (_homeUIState.value.weekModelLastScrollIndex > 0) {
+                val clickDayWeek = _homeUIState.value.clickDay.week
 
-        ioScope.launch {
-            println("=====>生成的数据")
-            val todayCalendar = Calendar.getInstance()
-            val todayYear = todayCalendar.get(Calendar.YEAR)
-            val todayMonth = todayCalendar.get(Calendar.MONTH)
-            val todayDay = todayCalendar.get(Calendar.DAY_OF_MONTH)
+                //找出参考日期
+                val baseDay =  if (_homeUIState.value.weekModelLastScrollIndex < currentPage) _homeUIState.value.weekEntity.dayList.last() else _homeUIState.value.weekEntity.dayList.first()
+                calendar[baseDay.year, baseDay.month] = baseDay.day
 
-            val monthList: MutableList<DayEntity> = mutableListOf()
+                XLogger.d("---------------->情况1")
+                //这样说明 是从 周模式 滑过来的
+                //判断左滑还是右滑进行日期的增减
+                repeat(7){
+                    calendar.add(
+                        Calendar.DAY_OF_MONTH,
+                        if (_homeUIState.value.weekModelLastScrollIndex < currentPage) 1 else -1
+                    )
 
-            val calendar = Calendar.getInstance()
-            calendar.set(todayYear,todayMonth, 1)
-
-            calendar.add(Calendar.MONTH, offset)
-
-            val year = calendar.get(Calendar.YEAR)
-            val month = calendar.get(Calendar.MONTH)
-            calendar[year, month] = 1
-
-            val nextMaxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-            for (day in 1..nextMaxDay) {
-                calendar[year, month] = day
-                val week = getWeek(calendar)
-                monthList.add(
-                    DayEntity(
+                    val year = calendar.get(Calendar.YEAR)
+                    val month = calendar.get(Calendar.MONTH)
+                    val day = calendar.get(Calendar.DAY_OF_MONTH)
+                    val weekOfDay = getWeek(calendar)
+                    val dayEntity = DayEntity(
                         year = year,
                         month = month,
                         day = day,
-                        week = week,
+                        week = weekOfDay,
                         isCurrentDay = todayYear == year && todayMonth == month && todayDay == day,
                         isCurrentMonth = todayYear == year && todayMonth == month,
-                        isWeekend = week == 6 || week == 7,
+                        isWeekend = weekOfDay == 6 || weekOfDay == 7,
+                        weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                        color = if (todayYear == year && todayMonth == month && todayDay == day) Color.Red else Color.Black
+                    )
+
+                    //添加点击的日期
+                    if (clickDayWeek > 0 && clickDayWeek == weekOfDay) {
+                        _homeUIState.update {
+                            it.copy(clickDay = dayEntity)
+                        }
+                    }
+
+
+                    if (_homeUIState.value.weekModelLastScrollIndex < currentPage){
+                        weekList.add(dayEntity)
+                    }else{
+                        XLogger.d("情况1 添加在前面 ${dayEntity.day}")
+                        weekList.add(0,dayEntity)
+                    }
+                }
+
+                weekEntity = WeekEntity(
+                    year = todayYear,
+                    month = todayMonth,
+                    dayList = weekList,
+                    offset = currentPage
+                )
+
+            }else{
+                XLogger.d("---------------->情况2")
+                //如果是从 月历 过来的
+                val clickDay = _homeUIState.value.clickDay
+
+                val findIndex = _homeUIState.value.monthEntity.dayList.indexOfFirst {
+                    it.year== clickDay.year && it.month == clickDay.month && it.day == clickDay.day
+                }
+
+                XLogger.d("月历 click========>${clickDay.year}-${clickDay.month + 1}-${clickDay.day}")
+                //把这一行 加入到周历的数据中
+                val rowIndex = (findIndex / 7 + if (findIndex % 7 == 0) 0 else 1) - 1
+                val (year, month) = _homeUIState.value.monthEntity
+                weekEntity =  WeekEntity(
+                    year = year,
+                    month = month,
+                    dayList = _homeUIState.value.monthEntity.dayList.subList(
+                        rowIndex * 7,
+                        rowIndex * 7 + 7
+                    ),
+                    offset = currentPage
+                )
+            }
+        }else{
+            XLogger.d("---------------->情况3")
+            //如果之前的数据为空 说明初始化的状态 则需要生成 今天这一周的数据 此方法暂时不会用到 因为 没有设置 进来就是周模式
+            val week = getWeek(calendar)
+            //回到周一
+            calendar.add(Calendar.DAY_OF_MONTH, -week)
+
+            (1..7).forEach{index->
+                calendar.add(Calendar.DAY_OF_MONTH,index-1)
+                val year = calendar.get(Calendar.YEAR)
+                val month = calendar.get(Calendar.MONTH)
+                val day = calendar.get(Calendar.DAY_OF_MONTH)
+                val weekOfDay = getWeek(calendar)
+
+                val dayEntity = DayEntity(
+                    year = year,
+                    month = month,
+                    day = day,
+                    week = weekOfDay,
+                    isCurrentDay = todayYear == year && todayMonth == month && todayDay == day,
+                    isCurrentMonth = todayYear == year && todayMonth == month,
+                    isWeekend = weekOfDay == 6 || weekOfDay == 7,
+                    weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                    color = if (todayYear == year && todayMonth == month && todayDay == day) Color.Red else Color.Black
+                )
+                weekList.add(dayEntity)
+            }
+            weekEntity = WeekEntity(
+                year = todayYear,
+                month = todayMonth,
+                dayList = weekList,
+                offset = currentPage
+            )
+        }
+
+
+        _homeUIState.update {
+            it.copy(weekEntity = weekEntity, weekModelLastScrollIndex = currentPage)
+        }
+    }
+
+
+    /**
+     * 获取月份数据
+     * @param currentPage Int
+     */
+    private fun getMonthData(
+        currentPage: Int = 0,
+        weekChangeMonthUpdateClickDay:Boolean = false
+    ) {
+        val offset = currentPage - 5000
+
+        XLogger.d("=====>生成的数据")
+        val todayCalendar = Calendar.getInstance()
+        val todayYear = todayCalendar.get(Calendar.YEAR)
+        val todayMonth = todayCalendar.get(Calendar.MONTH)
+        val todayDay = todayCalendar.get(Calendar.DAY_OF_MONTH)
+
+        val monthList: MutableList<DayEntity> = mutableListOf()
+
+        val calendar = Calendar.getInstance()
+        calendar.set(todayYear, todayMonth, 1)
+
+        calendar.add(Calendar.MONTH, offset)
+
+        val year = calendar.get(Calendar.YEAR)
+        val month = calendar.get(Calendar.MONTH)
+        calendar[year, month] = 1
+
+        val nextMaxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+        for (day in 1..nextMaxDay) {
+            calendar[year, month] = day
+            val week = getWeek(calendar)
+            val dayEntity = DayEntity(
+                year = year,
+                month = month,
+                day = day,
+                week = week,
+                isCurrentDay = todayYear == year && todayMonth == month && todayDay == day,
+                isCurrentMonth = todayYear == year && todayMonth == month,
+                isWeekend = week == 6 || week == 7,
+                weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                color = if (todayYear == year && todayMonth == month && todayDay == day) Color.Red else Color.Black
+            )
+            //如果点击的日期没有设置
+           if(weekChangeMonthUpdateClickDay){
+               //如果是周历 转月历 则 点击的日期不需要更新
+               XLogger.d("-------->周历转 月历 不需要 重新赋值click day")
+           }else if (todayYear == year && todayMonth == month && todayDay == day) {
+                _homeUIState.update {
+                    it.copy(clickDay = dayEntity)
+                }
+            } else if (offset!=0 && day == 1) {
+                _homeUIState.update {
+                    it.copy(clickDay = dayEntity)
+                }
+            }
+            monthList.add(
+                dayEntity
+            )
+        }
+
+
+        if (monthList.first().week != 1) {
+            //回到当月的第一天
+            calendar.set(year, month, 1)
+            repeat(monthList.first().week - 1) {
+                calendar.add(Calendar.DAY_OF_MONTH, -1)
+                val weekDay: Int = getWeek(calendar)
+                val year1: Int = calendar.get(Calendar.YEAR)
+                val month1: Int = calendar.get(Calendar.MONTH)
+                val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
+                monthList.add(
+                    0, DayEntity(
+                        year = year1,
+                        month = month1,
+                        day = day1,
+                        week = weekDay,
+                        isCurrentDay = false,
+                        isCurrentMonth = false,
+                        isWeekend = weekDay == 6 || weekDay == 7,
                         weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
                         color = Color.LightGray
                     )
                 )
             }
+        }
 
+        //
+        if (monthList.last().week != 7) {
+            //回到本月第一天
+            calendar[year, month] = 1
+            //回到当月最后一天
+            val lastDayOfMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-            if (monthList.first().week != 1) {
-                //回到当月的第一天
-                calendar.set(year, month, 1)
-                repeat(monthList.first().week - 1) {
+            calendar[year, month] = lastDayOfMonth
 
-                    calendar.add(Calendar.DAY_OF_MONTH, -1)
-
-                    val weekDay: Int = getWeek(calendar)
-                    val year1: Int = calendar.get(Calendar.YEAR)
-                    val month1: Int = calendar.get(Calendar.MONTH)
-                    val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
-                    monthList.add(
-                        0, DayEntity(
-                            year = year1,
-                            month = month1,
-                            day = day1,
-                            week = weekDay,
-                            isCurrentDay = false,
-                            isCurrentMonth = false,
-                            isWeekend = weekDay == 6 || weekDay == 7,
-                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                            color = Color.LightGray
-                        )
+            repeat(7 - monthList.last().week) {
+                calendar.add(Calendar.DAY_OF_MONTH, 1)
+                val weekDay: Int = getWeek(calendar)
+                val year1: Int = calendar.get(Calendar.YEAR)
+                val month1: Int = calendar.get(Calendar.MONTH)
+                val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
+                monthList.add(
+                    DayEntity(
+                        year = year1,
+                        month = month1,
+                        day = day1,
+                        week = weekDay,
+                        isCurrentDay = false,
+                        isCurrentMonth = false,
+                        isWeekend = weekDay == 6 || weekDay == 7,
+                        weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
+                        color = Color.LightGray
                     )
-                }
+                )
+            }
+        }
+
+        val monthEntity = MonthEntity(year = year, month = month, dayList = monthList, offset = currentPage)
+        XLogger.d("update month data :${monthEntity}")
+        _homeUIState.update {
+            it.copy(monthEntity = monthEntity, weekModelLastScrollIndex = 0)
+        }
+
+
+        //第一页且 周数据为空的时候 设置 周数据
+        if(offset==0 && _homeUIState.value.weekEntity.dayList.isEmpty()){
+            val clickDay = _homeUIState.value.clickDay
+
+            val findIndex = monthEntity.dayList.indexOfFirst {
+                it.year== clickDay.year && it.month == clickDay.month && it.day == clickDay.day
             }
 
-            //
-            if (monthList.last().week != 7) {
-                //回到本月第一天
-                calendar[year, month] = 1
-                //回到当月最后一天
-                val lastDayOfMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+            XLogger.d("月历 click========>${clickDay.year}-${clickDay.month + 1}-${clickDay.day}")
+            //把这一行 加入到周历的数据中
+            val rowIndex = (findIndex / 7 + if (findIndex % 7 == 0) 0 else 1) - 1
 
-                calendar[year, month] = lastDayOfMonth
-
-                repeat(7 - monthList.last().week) {
-                    calendar.add(Calendar.DAY_OF_MONTH, 1)
-                    val weekDay: Int = getWeek(calendar)
-                    val year1: Int = calendar.get(Calendar.YEAR)
-                    val month1: Int = calendar.get(Calendar.MONTH)
-                    val day1: Int = calendar.get(Calendar.DAY_OF_MONTH)
-                    monthList.add(
-                        DayEntity(
-                            year = year1,
-                            month = month1,
-                            day = day1,
-                            week = weekDay,
-                            isCurrentDay = false,
-                            isCurrentMonth = false,
-                            isWeekend = weekDay == 6 || weekDay == 7,
-                            weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR),
-                            color = Color.LightGray
-                        )
-                    )
-//                    println("添加的数据=====>${year1}-${month1 + 1}-${day1}周:${weekDay}")
-                }
-            }
-
-            viewModelScope.launch (Dispatchers.Main){
-                val monthEntity = MonthEntity(year = year, month = month, monthList = monthList)
-                _homeUIState.update {
-                    it.copy(monthEntity = monthEntity)
-                }
-                mMonthEntity.value = monthEntity
-                mCurrentPage.value = currentPage
+            _homeUIState.update {
+                it.copy(weekEntity =  WeekEntity(
+                    year = year,
+                    month = month,
+                    dayList =  monthEntity.dayList.subList(
+                        rowIndex * 7,
+                        rowIndex * 7 + 7
+                    ),
+                    offset = currentPage
+                ))
             }
         }
     }
