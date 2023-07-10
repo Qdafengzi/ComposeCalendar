@@ -1,7 +1,8 @@
 # 日历的绘制
-<img src="./art/calendar.gif" width="50%">
-<video id="video" controls="" preload="none">
-      <source id="mp4" src="./art/video.mp4" type="video/mp4">
+<img src="./art/calendar.gif" width="576" alt="">
+
+<video id="video" preload="none" poster="./art/video.mp4">
+      <source id="mp4" src="./art/video.mp4" type="video/mp4"/>
 </video>
 
 
