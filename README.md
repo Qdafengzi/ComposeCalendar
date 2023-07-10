@@ -1,5 +1,6 @@
 # 日历的绘制
 <img src="./art/calendar.gif" width="50%">
+<video src="./art/video.mp4" ></video>
 
 ### Compose UI实现
 关键类和技术
