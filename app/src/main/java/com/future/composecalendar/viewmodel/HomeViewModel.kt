@@ -30,6 +30,7 @@ data class HomeUIState(
 
     // 周历模式上一次滑动的index
     val weekModelLastScrollIndex:Int = 0,
+    val showYearMonthDialog:Boolean = false,
 )
 
 sealed class HomeAction {
@@ -38,6 +39,7 @@ sealed class HomeAction {
     data class SetCalendarModel(val isWeekModel: Boolean,val page: Int) : HomeAction()
 
     data class UpdateData(val page:Int):HomeAction()
+    data class ShowYearMonthSelectDialog(val show:Boolean):HomeAction()
 }
 
 
@@ -159,6 +161,11 @@ class HomeViewModel : ViewModel() {
                     getWeekData(action.page)
                 }else{
                     getMonthData(action.page)
+                }
+            }
+            is HomeAction.ShowYearMonthSelectDialog->{
+                _homeUIState.update {
+                    it.copy(showYearMonthDialog = action.show)
                 }
             }
         }
